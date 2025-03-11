@@ -14,7 +14,7 @@ Clone the Repository:
 bash
 Copy
 Edit
-git clone https://github.com/C-C-N-C/Trinity/main/.git
+git clone https://github.com/C-C-N-C/Trinity.git
 cd trinity
 Install Dependencies: Ensure you have all the necessary dependencies installed to run Trinity's code:
 bash
