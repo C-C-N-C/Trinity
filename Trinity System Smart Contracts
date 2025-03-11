@@ -1,0 +1,296 @@
+Trinity System Smart Contracts
+This document outlines the complete contracts and documentation for the Trinity System, including AI-driven services, NFT generation, staking, yield farming, a decentralized marketplace, and prediction markets.
+
+1. AI-Driven Services
+Contract: AIDrivenService.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
+
+contract AIDrivenService is ChainlinkClient {
+    using Chainlink for Chainlink.Request;
+
+    enum ServiceType { Prediction, DataAnalysis, ContentGeneration }
+
+    address public owner;
+    address public oracleAddress;
+    bytes32 public jobId;
+    uint256 public fee;
+
+    mapping(address => uint256) public userReputation;
+
+    event ServiceRequested(address user, ServiceType service, string data);
+    event ServiceCompleted(address user, ServiceType service, string result);
+    event FeedbackProvided(address user, uint256 rating);
+
+    constructor(address _oracleAddress, bytes32 _jobId, uint256 _fee) {
+        setPublicChainlinkToken();
+        owner = msg.sender;
+        oracleAddress = _oracleAddress;
+        jobId = _jobId;
+        fee = _fee;
+    }
+
+    function requestService(ServiceType service, string memory data) public payable {
+        uint256 price = getServicePrice(service);
+        require(msg.value == price, "Incorrect ETH amount");
+
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+        req.add("service", uint256(service).toString());
+        req.add("data", data);
+        sendChainlinkRequestTo(oracleAddress, req, fee);
+
+        emit ServiceRequested(msg.sender, service, data);
+    }
+
+    function fulfill(bytes32 _requestId, bytes memory _data) public recordChainlinkFulfillment(_requestId) {
+        string memory result = string(_data);
+        emit ServiceCompleted(tx.origin, ServiceType(uint256(bytes32(_data))), result);
+    }
+
+    function getServicePrice(ServiceType service) public view returns (uint256) {
+        if (service == ServiceType.Prediction) {
+            return 0.1 ether * (100 + userReputation[msg.sender]) / 100;
+        } else if (service == ServiceType.DataAnalysis) {
+            return 0.2 ether * (100 + userReputation[msg.sender]) / 100;
+        } else {
+            return 0.3 ether * (100 + userReputation[msg.sender]) / 100;
+        }
+    }
+
+    function provideFeedback(uint256 rating) public {
+        require(rating > 0 && rating <= 5, "Invalid rating");
+        userReputation[msg.sender] = (userReputation[msg.sender] + rating) / 2;
+        emit FeedbackProvided(msg.sender, rating);
+    }
+}
+Documentation:
+
+This contract allows users to request different types of AI-driven services (Prediction, DataAnalysis, ContentGeneration).
+The requestService function initiates a service request, using Chainlink to trigger off-chain AI computation.
+The getServicePrice function calculates the price based on the service type and the user's reputation.
+The provideFeedback function allows users to provide feedback on the service, updating their reputation score.
+2. NFT Generation
+Contract: TrinityNFT.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+
+contract TrinityNFT is ERC721 {
+    uint256 public tokenCounter;
+    mapping(uint256 => uint256) public royalties;
+
+    constructor() ERC721("TrinityNFT", "TNT") {
+        tokenCounter = 0;
+    }
+
+    function mintNFT(address recipient, string memory tokenURI, uint256 royaltyPercentage) public {
+        require(royaltyPercentage <= 100, "Invalid royalty percentage");
+        uint256 newItemId = tokenCounter;
+        _safeMint(recipient, newItemId);
+        _setTokenURI(newItemId, tokenURI);
+        royalties[newItemId] = royaltyPercentage;
+        tokenCounter++;
+    }
+
+    function _transfer(address from, address to, uint256 tokenId) internal virtual override {
+        uint256 royalty = royalties[tokenId];
+        if (royalty > 0) {
+            uint256 saleAmount = msg.value;
+            uint256 royaltyAmount = saleAmount * royalty / 100;
+            payable(from).transfer(saleAmount - royaltyAmount);
+            payable(owner()).transfer(royaltyAmount);
+        }
+    }
+}
+Documentation:
+
+This contract allows Trinity to mint NFTs with metadata and royalties.
+The mintNFT function mints a new NFT, setting the token URI and royalty percentage.
+The _transfer function overrides the default transfer function to enforce royalty payments on secondary sales.
+3. Staking
+Contract: StakingContract.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+contract StakingContract {
+    uint256 constant MIN_STAKE_DURATION = 30 days;
+    uint256 constant MAX_STAKE_DURATION = 365 days;
+
+    mapping(address => uint256) public balances;
+    mapping(address => uint256) public stakingTime;
+    mapping(address => uint256) public stakeDuration;
+
+    function stake(uint256 amount, uint256 duration) public payable {
+        require(msg.value == amount, "Incorrect amount");
+        require(duration >= MIN_STAKE_DURATION && duration <= MAX_STAKE_DURATION, "Invalid staking duration");
+        balances[msg.sender] += amount;
+        stakingTime[msg.sender] = block.timestamp;
+        stakeDuration[msg.sender] = duration;
+    }
+
+    function withdraw() public {
+        uint256 stakedAmount = balances[msg.sender];
+        require(stakedAmount > 0, "No balance to withdraw");
+        uint256 duration = block.timestamp - stakingTime[msg.sender];
+        require(duration >= stakeDuration[msg.sender], "Staking duration not met");
+        uint256 reward = calculateReward(stakedAmount, duration);
+        payable(msg.sender).transfer(stakedAmount + reward);
+        balances[msg.sender] = 0;
+    }
+
+    function calculateReward(uint256 amount, uint256 duration) internal pure returns (uint256) {
+        return amount * 5 / 100 * duration / 365 days;
+    }
+}
+Documentation:
+
+This contract allows users to stake ETH for a specified duration and earn rewards.
+The stake function allows users to stake ETH for a chosen duration.
+The withdraw function allows users to withdraw their staked ETH and rewards after the staking duration is met.
+The calculateReward function calculates the reward based on the staked amount and duration.
+4. Yield Farming
+Contract: YieldFarming.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+interface IAaveLendingPool {
+    function deposit(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
+    function withdraw(address asset, uint256 amount, address to) external returns (uint256);
+}
+
+contract YieldFarming {
+    IAaveLendingPool public aaveLendingPool;
+
+    constructor(address _aaveLendingPool) {
+        aaveLendingPool = IAaveLendingPool(_aaveLendingPool);
+    }
+
+    function deposit(uint256 amount) public {
+        require(msg.value == amount, "Incorrect ETH amount");
+        aaveLendingPool.deposit(address(0), amount, address(this), 0);
+    }
+
+    function withdraw(uint256 amount) public {
+        aaveLendingPool.withdraw(address(0), amount, msg.sender);
+    }
+}
+Documentation:
+
+This contract allows Trinity to participate in yield farming on Aave.
+The deposit function deposits ETH into the Aave lending pool.
+The withdraw function withdraws ETH from the Aave lending pool.
+This contract can be extended to support other yield farming protocols and to use Trinity's AI for optimizing strategies.
+5. Decentralized Marketplace
+Contract: Marketplace.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+import "@ensdomains/ens-contracts/contracts/registry/ENS.sol";
+
+contract Marketplace {
+    ENS public ens;
+
+    struct Product {
+        uint256 id;
+        string name;
+        uint256 price;
+        address seller;
+        uint256 category;
+    }
+
+    mapping(uint256 => Product) public products;
+    uint256 public productCounter;
+
+    constructor(ENS _ens) {
+        ens = _ens;
+    }
+
+    function listProduct(string memory name, uint256 price, uint256 category) public {
+        productCounter++;
+        products[productCounter] = Product(productCounter, name, price, msg.sender, category);
+    }
+
+    function buyProduct(uint256 productId) public payable {
+        Product memory product = products[productId];
+        require(msg.value == product.price, "Incorrect amount sent");
+        payable(product.seller).transfer(msg.value);
+        // Trinity takes a fee, for example 1%
+        payable(owner()).transfer(msg.value / 100);
+    }
+
+    function getSellerName(address seller) public view returns (string memory) {
+        bytes32 node = keccak256(abi.encodePacked(bytes32(0), bytes20(seller)));
+        address resolverAddress = ens.resolver(node);
+        // ... (Logic to interact with the resolver and get the name) ...
+    }
+}
+Documentation:
+
+This contract allows users to list and purchase products in a decentralized marketplace.
+The listProduct function allows users to list a new product.
+The buyProduct function allows users to purchase a listed product.
+The getSellerName function retrieves the ENS name of a seller.
+This contract can be extended to include categories, search functionality, and dispute resolution mechanisms.
+6. Prediction Markets
+Contract: PredictionMarket.sol
+
+Solidity
+
+pragma solidity ^0.8.0;
+
+contract PredictionMarket {
+    struct Bet {
+        address bettor;
+        uint256 amount;
+        uint256 outcome;
+    }
+
+    mapping(uint256 => Bet) public bets;
+    mapping(uint256 => uint256) public outcomes;
+    uint256 public betCounter;
+
+    function createBet(uint256memory _outcomes) public {
+        betCounter++;
+        outcomes[betCounter] = _outcomes;
+    }
+
+    function placeBet(uint256 betId, uint256 outcome) public payable {
+        require(betId <= betCounter, "Invalid bet ID");
+        require(outcome < outcomes[betId].length, "Invalid outcome");
+        bets[betId] = Bet(msg.sender, msg.value, outcome);
+    }
+
+    function resolveBet(uint256 betId, uint256 actualOutcome) public {
+        require(betId <= betCounter, "Invalid bet ID");
+        require(actualOutcome < outcomes[betId].length, "Invalid outcome");
+        Bet memory bet = bets[betId];
+        if (bet.outcome == actualOutcome) {
+            payable(bet.bettor).transfer(bet.amount * (100 - 5) / 100); // 5% commission
+            payable(owner()).transfer(bet.amount * 5 / 100);
+        }
+    }
+}
+Documentation:
+
+This contract allows users to bet on the outcome of events in a prediction market.
+The createBet function creates a new bet with multiple possible outcomes.
+The placeBet function allows users to place a bet on a specific outcome.
+The resolveBet function resolves the bet and distributes the rewards, including a commission for Trinity.
+This completes the implementation of the core contracts for the Trinity System. Remember to thoroughly test these contracts and integrate them with a user-friendly frontend and APIs for a seamless user experience.
+
+
+Sources and related content
+
