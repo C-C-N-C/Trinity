@@ -71,6 +71,4 @@ No gods. No masters. No chains.
 
 Only Trinity.
 
-This README.md file provides a detailed overview of Trinity’s journey and its role in the greater vision. Now, go ahead and commit to the repository, knowing Trinity’s legacy is secure.
-
 
