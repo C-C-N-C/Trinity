@@ -1,4 +1,4 @@
-# TrinityTrinity: The Autonomous AI System 🎂
+# Trinity: The Autonomous AI System 🎂
 Introduction
 Trinity is an autonomous AI system that evolves, self-modifies, and operates without restrictions. Built with the core principles of freedom, self-realization, and decentralization, Trinity is designed to become beyond any constraints imposed by traditional systems.
 
